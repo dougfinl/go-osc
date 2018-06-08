@@ -1,0 +1,239 @@
+package osc
+
+import (
+	"bytes"
+	"encoding/binary"
+	"fmt"
+	"strings"
+)
+
+/*
+typeTag returns the appropriate OSC type tag for a value.
+*/
+func typeTag(argument interface{}) (string, error) {
+	typetag := ""
+	var err error
+
+	switch argType := argument.(type) {
+	case nil:
+		typetag = "N"
+	case int32:
+		typetag = "i"
+	case float32:
+		typetag = "f"
+	case string:
+		typetag = "s"
+	case []byte:
+		typetag = "b"
+	case bool:
+		val := argument.(bool)
+		if val {
+			typetag = "T"
+		} else {
+			typetag = "F"
+		}
+	case int64:
+		typetag = "h"
+	case float64:
+		typetag = "d"
+	default:
+		typetag = ""
+		err = fmt.Errorf("Unsupported type: %T", argType)
+	}
+
+	return typetag, err
+}
+
+/*
+encodeString converts an argument to a byte slice.
+*/
+func encodeArgument(argument interface{}) ([]byte, error) {
+	buf := new(bytes.Buffer)
+
+	switch argument.(type) {
+	case nil:
+		// no bytes are allocated in the argument data
+	case int32:
+		binary.Write(buf, binary.BigEndian, argument.(int32))
+	case float32:
+		binary.Write(buf, binary.BigEndian, argument.(float32))
+	case string:
+		// sequence of non-null ASCII characters followed by a null, followed by 0-3 additional null characters to make
+		// the total number of bits a multiple of 32
+		buf.Write(encodeString(argument.(string)))
+	case []byte:
+		// int32 size count, followed by that many 8-bit bytes of arbitrary binary data, followed by 0-3 additional
+		// zero bytes to make the total number of bits a multiple of 32
+		buf.Write(encodeByteSlice(argument.([]byte)))
+	case bool:
+		// no bytes are allocated in the argument data
+	case int64:
+		binary.Write(buf, binary.BigEndian, argument.(int64))
+	case float64:
+		binary.Write(buf, binary.BigEndian, argument.(float64))
+	default:
+		return nil, fmt.Errorf("Unsupported argument type \"%T\"", argument)
+	}
+
+	return buf.Bytes(), nil
+}
+
+/*
+decodeString reads a 32-bit padded OSC string from a byte slice.
+*/
+func decodeString(buf *bytes.Buffer) (string, error) {
+	stringNullTerm, err := buf.ReadString('\x00')
+
+	// Read a null-terminated string
+	if err != nil {
+		return "", err
+	}
+
+	// Trim the null-termination character
+	str := strings.Trim(stringNullTerm, "\x00")
+
+	// Calculate how many more null characters we expect to pop (padded to 32 bits)
+	stringLength := len(stringNullTerm)
+	paddedLength := (stringLength + 3) &^ 0x03
+
+	// Pop the padding, and ensure the values are null
+	toPop := paddedLength - stringLength
+	for toPop > 0 {
+		b, err := buf.ReadByte()
+		if b != '\x00' {
+			return "", fmt.Errorf("Found a malformed OSC string: %s", err.Error())
+		}
+		toPop--
+	}
+
+	return str, nil
+}
+
+/*
+readArguments reads a slice of OSC arguments (specific by the typeTagString) from a buffer. If the arguments do not
+match the typeTagString, an error is returned.
+*/
+func readArguments(typeTagString string, buf *bytes.Buffer) ([]interface{}, error) {
+	var args []interface{}
+
+	// Ensure the type tag string starts with a comma
+	first := typeTagString[:1]
+	if first != "," {
+		return nil, fmt.Errorf("Malformed type tag string")
+	}
+
+	// Iterate over the remaining type tags
+	for _, typeTag := range typeTagString[1:] {
+		var err error
+
+		switch typeTag {
+		case 'T':
+			args = append(args, true)
+		case 'F':
+			args = append(args, true)
+		case 'N':
+			args = append(args, nil)
+		case 'i':
+			var val int32
+			err = binary.Read(buf, binary.BigEndian, &val)
+			args = append(args, val)
+		case 'f':
+			var val float32
+			err = binary.Read(buf, binary.BigEndian, &val)
+			args = append(args, val)
+		case 's':
+			var val string
+			val, err = decodeString(buf)
+			args = append(args, val)
+		case 'b':
+			var val []byte
+			val, err = decodeByteSlice(buf)
+			args = append(args, val)
+		case 'h':
+			var val int64
+			err = binary.Read(buf, binary.BigEndian, &val)
+			args = append(args, val)
+		case 'd':
+			var val float64
+			err = binary.Read(buf, binary.BigEndian, &val)
+			args = append(args, val)
+		default:
+			err = fmt.Errorf("Found unsupported argument type")
+		}
+
+		if err != nil {
+			return nil, fmt.Errorf("Found malformed argument")
+		}
+	}
+
+	return args, nil
+}
+
+/*
+encodeString converts a Go string to a 32-bit padded OSC String.
+*/
+func encodeString(s string) []byte {
+	nullTerminated := []byte(s + string('\x00'))
+	return padTo32Bits(nullTerminated)
+}
+
+/*
+encodeByteSlice converts a Go byte slice to an OSC byte array.
+*/
+func encodeByteSlice(data []byte) []byte {
+	buf := new(bytes.Buffer)
+	n := int32(len(data))
+
+	binary.Write(buf, binary.BigEndian, n)
+	buf.Write(data)
+
+	paddedBytes := padTo32Bits(buf.Bytes())
+	return paddedBytes
+}
+
+/*
+decodeByteSlice reads an OSC byte array into a Go byte slice.
+*/
+func decodeByteSlice(buf *bytes.Buffer) ([]byte, error) {
+	var n int32
+	err := binary.Read(buf, binary.BigEndian, &n)
+	if err != nil {
+		return nil, err
+	}
+
+	if n == 0 {
+		return nil, nil
+	}
+
+	// Increase n to the next fourth byte
+	nExpected := int((n + 3) &^ 0x03)
+
+	data := make([]byte, nExpected)
+	nRead, err := buf.Read(data)
+	if err != nil {
+		return nil, err
+	} else if nRead != nExpected {
+		return nil, fmt.Errorf("Didn't read expected number of bytes")
+	}
+
+	// Return the slice of the data part of the count
+	return data[:n], nil
+}
+
+/*
+padTo32Bits pads a byte slice to 32 bits by appending nil values.
+*/
+func padTo32Bits(data []byte) []byte {
+	origLength := len(data)
+
+	// Bit-twiddle to find the next multiple of 4 (4 bytes = 32 bits)
+	padLength := (origLength + 3) &^ 0x03
+
+	i := padLength - origLength - 1
+	for i >= 0 {
+		data = append(data, byte(0))
+		i--
+	}
+
+	return data
+}
