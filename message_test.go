@@ -82,7 +82,7 @@ func TestTypeTagString(t *testing.T) {
 func TestBytes(t *testing.T) {
 	msg1 := NewEmptyMessage()
 	expected1 := []byte{'/', '\x00', '\x00', '\x00', ',', '\x00', '\x00', '\x00'}
-	result1, err1 := msg1.Bytes()
+	result1, err1 := msg1.MarshalBinary()
 
 	if err1 != nil {
 		t.Error(err1)
@@ -93,7 +93,7 @@ func TestBytes(t *testing.T) {
 	msg2 := NewMessage("/oscillator/4/frequency")
 	msg2.AddArgument(float32(440))
 	expected2 := []byte{'/', 'o', 's', 'c', 'i', 'l', 'l', 'a', 't', 'o', 'r', '/', '4', '/', 'f', 'r', 'e', 'q', 'u', 'e', 'n', 'c', 'y', '\x00', ',', 'f', '\x00', '\x00', '\x43', '\xdc', '\x00', '\x00'}
-	result2, err2 := msg2.Bytes()
+	result2, err2 := msg2.MarshalBinary()
 
 	if err2 != nil {
 		t.Error(err2)
@@ -108,7 +108,7 @@ func TestBytes(t *testing.T) {
 	msg3.AddArgument(float32(1.234))
 	msg3.AddArgument(float32(5.678))
 	expected3 := []byte{'/', 'f', 'o', 'o', '\x00', '\x00', '\x00', '\x00', ',', 'i', 'i', 's', 'f', 'f', '\x00', '\x00', '\x00', '\x00', '\x03', '\xe8', '\xff', '\xff', '\xff', '\xff', '\x68', '\x65', '\x6c', '\x6c', '\x6f', '\x00', '\x00', '\x00', '\x3f', '\x9d', '\xf3', '\xb6', '\x40', '\xb5', '\xb2', '\x2d'}
-	result3, err3 := msg3.Bytes()
+	result3, err3 := msg3.MarshalBinary()
 
 	if err3 != nil {
 		t.Error(err3)
@@ -119,7 +119,7 @@ func TestBytes(t *testing.T) {
 	msg4 := NewMessage("/bytes")
 	msg4.AddArgument([]byte{'a', 'b', 'c', 'd', 'e'})
 	expected4 := []byte{'/', 'b', 'y', 't', 'e', 's', '\x00', '\x00', ',', 'b', '\x00', '\x00', '\x00', '\x00', '\x00', '\x05', 'a', 'b', 'c', 'd', 'e', '\x00', '\x00', '\x00'}
-	result4, err4 := msg4.Bytes()
+	result4, err4 := msg4.MarshalBinary()
 
 	if err4 != nil {
 		t.Error(err4)
@@ -128,10 +128,11 @@ func TestBytes(t *testing.T) {
 	}
 }
 
-func TestNewMessageFromData(t *testing.T) {
+func TestUnmarshalBinary(t *testing.T) {
 	data1 := []byte{'/', '\x00', '\x00', '\x00', ',', '\x00', '\x00', '\x00'}
 	expected1 := NewMessage("/")
-	result1, err1 := NewMessageFromData(data1)
+	var result1 Message
+	err1 := result1.UnmarshalBinary(data1)
 
 	if err1 != nil {
 		t.Error(err1)
@@ -142,7 +143,8 @@ func TestNewMessageFromData(t *testing.T) {
 	data2 := []byte{'/', 'o', 's', 'c', 'i', 'l', 'l', 'a', 't', 'o', 'r', '/', '4', '/', 'f', 'r', 'e', 'q', 'u', 'e', 'n', 'c', 'y', '\x00', ',', 'f', '\x00', '\x00', '\x43', '\xdc', '\x00', '\x00'}
 	expected2 := NewMessage("/oscillator/4/frequency")
 	expected2.AddArgument(float32(440))
-	result2, err2 := NewMessageFromData(data2)
+	var result2 Message
+	err2 := result2.UnmarshalBinary(data2)
 
 	if err2 != nil {
 		t.Error(err2)
@@ -157,7 +159,8 @@ func TestNewMessageFromData(t *testing.T) {
 	expected3.AddArgument("hello")
 	expected3.AddArgument(float32(1.234))
 	expected3.AddArgument(float32(5.678))
-	result3, err3 := NewMessageFromData(data3)
+	var result3 Message
+	err3 := result3.UnmarshalBinary(data3)
 
 	if err3 != nil {
 		t.Error(err3)
@@ -168,7 +171,8 @@ func TestNewMessageFromData(t *testing.T) {
 	data4 := []byte{'/', 'b', 'y', 't', 'e', 's', '\x00', '\x00', ',', 'b', '\x00', '\x00', '\x00', '\x00', '\x00', '\x05', 'a', 'b', 'c', 'd', 'e', '\x00', '\x00', '\x00'}
 	expected4 := NewMessage("/bytes")
 	expected4.AddArgument([]byte{'a', 'b', 'c', 'd', 'e'})
-	result4, err4 := NewMessageFromData(data4)
+	var result4 Message
+	err4 := result4.UnmarshalBinary(data4)
 
 	if err4 != nil {
 		t.Error(err4)

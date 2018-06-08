@@ -15,6 +15,9 @@ type Message struct {
 	Arguments []interface{}
 }
 
+// Compile-time check to ensure Message implements the Packet interface.
+var _ Packet = Message{}
+
 /*
 NewEmptyMessage returns an OSC message with default values.
 */
@@ -31,32 +34,30 @@ func NewMessage(address string) Message {
 }
 
 /*
-NewMessageFromData attempts to create a new Message from an encoded byte slice.
+UnmarshalBinary attempts to create a new Message from an encoded byte slice.
 */
-func NewMessageFromData(data []byte) (Message, error) {
-	// Create a blank message (note: invalid OSC)
-	msg := Message{Address: "", Arguments: nil}
-
+func (msg *Message) UnmarshalBinary(data []byte) error {
 	buf := bytes.NewBuffer(data)
 
 	address, err := decodeString(buf)
 	if err != nil {
-		return msg, err
+		return err
 	}
-	msg.Address = address
 
 	typeTagString, err := decodeString(buf)
 	if err != nil {
-		return msg, err
+		return err
 	}
 
 	args, err := readArguments(typeTagString, buf)
 	if err != nil {
-		return msg, err
+		return err
 	}
+
+	msg.Address = address
 	msg.Arguments = args
 
-	return msg, nil
+	return nil
 }
 
 /*
@@ -105,13 +106,28 @@ func (msg *Message) AddressParts() []string {
 String implements the fmt.Stringer interface.
 */
 func (msg Message) String() string {
-	return fmt.Sprintf("Message{Address: %s, Arguments: %v}", msg.Address, msg.Arguments)
+	var buf bytes.Buffer
+
+	buf.WriteString("Message: ")
+	buf.WriteString(msg.Address)
+
+	for _, arg := range msg.Arguments {
+		buf.WriteString(" (")
+		typeTag, _ := typeTag(arg)
+		buf.WriteString(typeTag)
+		buf.WriteString(")")
+		buf.WriteString(fmt.Sprintf("%v", arg))
+	}
+
+	return buf.String()
+
+	// return fmt.Sprintf("Message{Address: %s, Arguments: %v}", msg.Address, msg.Arguments)
 }
 
 /*
-Bytes encodes the Message as per the OSC standard.
+MarshalBinary encodes the Message as per the OSC standard.
 */
-func (msg *Message) Bytes() (data []byte, err error) {
+func (msg Message) MarshalBinary() (data []byte, err error) {
 	buf := new(bytes.Buffer)
 
 	buf.Write(encodeString(msg.Address))
