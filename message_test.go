@@ -3,6 +3,7 @@ package osc
 import (
 	"bytes"
 	"testing"
+	"time"
 )
 
 func TestNewEmptyMessage(t *testing.T) {
@@ -14,35 +15,6 @@ func TestNewEmptyMessage(t *testing.T) {
 
 	if msg.Arguments != nil {
 		t.Error("Message does not have 0 arguments")
-	}
-}
-
-func TestPadTo32Bits(t *testing.T) {
-	// 0-byte slice should not change size
-	test1 := []byte{}
-	expected1 := []byte{}
-	result1 := padTo32Bits(test1)
-
-	if !bytes.Equal(result1, expected1) {
-		t.Errorf("New value is %v, expected %v", result1, expected1)
-	}
-
-	// Single-byte slice should become 4 bytes (32 bits)
-	test2 := []byte{'/'}
-	expected2 := []byte{'/', '\x00', '\x00', '\x00'}
-	result2 := padTo32Bits(test2)
-
-	if !bytes.Equal(result2, expected2) {
-		t.Errorf("New value is %v, expected %v", result2, expected2)
-	}
-
-	// Random test
-	test3 := []byte("/oscillator/4/frequency")
-	expected3 := []byte{'/', 'o', 's', 'c', 'i', 'l', 'l', 'a', 't', 'o', 'r', '/', '4', '/', 'f', 'r', 'e', 'q', 'u', 'e', 'n', 'c', 'y', '\x00'}
-	result3 := padTo32Bits(test3)
-
-	if !bytes.Equal(result3, expected3) {
-		t.Errorf("New value if %v, expected %v", result3, expected3)
 	}
 }
 
@@ -69,7 +41,9 @@ func TestTypeTagString(t *testing.T) {
 	msg2.AddArgument(false)
 	msg2.AddArgument(int64(9e10))
 	msg2.AddArgument(float64(10.1))
-	expected2 := ",NifsbTFhd"
+	msg2.AddArgument(NewTimeTag(time.Date(2018, 1, 1, 0, 0, 0, 0, time.UTC)))
+	msg2.AddArgument(NewImmediateTimeTag())
+	expected2 := ",NifsbTFhdtt"
 	result2, err2 := msg2.TypeTagString()
 
 	if err2 != nil {
@@ -79,7 +53,7 @@ func TestTypeTagString(t *testing.T) {
 	}
 }
 
-func TestBytes(t *testing.T) {
+func TestMarshalBinary(t *testing.T) {
 	msg1 := NewEmptyMessage()
 	expected1 := []byte{'/', '\x00', '\x00', '\x00', ',', '\x00', '\x00', '\x00'}
 	result1, err1 := msg1.MarshalBinary()

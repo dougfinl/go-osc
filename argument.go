@@ -5,7 +5,51 @@ import (
 	"encoding/binary"
 	"fmt"
 	"strings"
+	"time"
 )
+
+const (
+	// Difference in seconds between the Unix epoch (1970) and OSC epoch (1900)
+	unixOSCEpochOffset = 2208988800
+	// Number of nanoseconds in 1 second
+	nanosPerSecond = 1e9
+	// The encoded value of an "immediate" time tag
+	timeTagImmediate = 0x01
+)
+
+/*
+TimeTag represents an OSC time tag with an underlying Go time.Time, and an "immediate" flag.
+*/
+type TimeTag struct {
+	time      time.Time
+	Immediate bool
+}
+
+/*
+NewTimeTag returns a TimeTag with the specified Go Time.
+*/
+func NewTimeTag(t time.Time) TimeTag {
+	return TimeTag{time: t, Immediate: false}
+}
+
+/*
+NewImmediateTimeTag returns a TimeTag representing immediate execution.
+*/
+func NewImmediateTimeTag() TimeTag {
+	return TimeTag{Immediate: true}
+}
+
+func (tt TimeTag) String() string {
+	var str string
+
+	if tt.Immediate {
+		str = "TimeTag: (immediate)"
+	} else {
+		str = "TimeTag: " + tt.time.String()
+	}
+
+	return str
+}
 
 /*
 typeTag returns the appropriate OSC type tag for a value.
@@ -36,6 +80,8 @@ func typeTag(argument interface{}) (string, error) {
 		typetag = "h"
 	case float64:
 		typetag = "d"
+	case TimeTag:
+		typetag = "t"
 	default:
 		typetag = ""
 		err = fmt.Errorf("Unsupported type: %T", argType)
@@ -71,6 +117,8 @@ func encodeArgument(argument interface{}) ([]byte, error) {
 		binary.Write(buf, binary.BigEndian, argument.(int64))
 	case float64:
 		binary.Write(buf, binary.BigEndian, argument.(float64))
+	case TimeTag:
+		buf.Write(encodeTimeTag(argument.(TimeTag)))
 	default:
 		return nil, fmt.Errorf("Unsupported argument type \"%T\"", argument)
 	}
@@ -157,6 +205,10 @@ func readArguments(typeTagString string, buf *bytes.Buffer) ([]interface{}, erro
 			var val float64
 			err = binary.Read(buf, binary.BigEndian, &val)
 			args = append(args, val)
+		case 't':
+			var val TimeTag
+			val, err = decodeTimeTag(buf)
+			args = append(args, val)
 		default:
 			err = fmt.Errorf("Found unsupported argument type")
 		}
@@ -189,6 +241,52 @@ func encodeByteSlice(data []byte) []byte {
 
 	paddedBytes := padTo32Bits(buf.Bytes())
 	return paddedBytes
+}
+
+/*
+encodeTimeTag converts a TimeTag to a 64-bit OSC timetag.
+*/
+func encodeTimeTag(tt TimeTag) []byte {
+	var timeTag64 uint64
+
+	if tt.Immediate {
+		// If the TimeTag has the "immediate" flag set, ignore the time value
+		timeTag64 = timeTagImmediate
+	} else {
+		// Encode the time with reference to the OSC epoch
+		timeOSCSecs := uint64(tt.time.Unix() + unixOSCEpochOffset)
+		timeOSCNanos := uint64(tt.time.UnixNano()+unixOSCEpochOffset*nanosPerSecond) - timeOSCSecs*nanosPerSecond
+
+		timeTag64 = timeOSCSecs<<32 | timeOSCNanos&0xFFFFFFFF
+	}
+
+	buf := new(bytes.Buffer)
+	binary.Write(buf, binary.BigEndian, timeTag64)
+
+	return buf.Bytes()
+}
+
+func decodeTimeTag(buf *bytes.Buffer) (TimeTag, error) {
+	var timeTag64 uint64
+
+	err := binary.Read(buf, binary.BigEndian, &timeTag64)
+	if err != nil {
+		return TimeTag{}, err
+	}
+
+	var timeTag TimeTag
+
+	if timeTag64 == timeTagImmediate {
+		timeTag = NewImmediateTimeTag()
+	} else {
+		seconds := int64(timeTag64>>32) - unixOSCEpochOffset
+		nanoSeconds := int64(timeTag64 & 0xFFFFFFFF)
+
+		t := time.Unix(seconds, nanoSeconds).In(time.UTC)
+		timeTag = NewTimeTag(t)
+	}
+
+	return timeTag, nil
 }
 
 /*
