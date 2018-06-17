@@ -110,7 +110,7 @@ func TestUnmarshalBinary(t *testing.T) {
 
 	if err1 != nil {
 		t.Error(err1)
-	} else if !result1.Equals(&expected1) {
+	} else if !result1.Equals(expected1) {
 		t.Errorf("Got %v, expected %v", result1, expected1)
 	}
 
@@ -122,7 +122,7 @@ func TestUnmarshalBinary(t *testing.T) {
 
 	if err2 != nil {
 		t.Error(err2)
-	} else if !result2.Equals(&expected2) {
+	} else if !result2.Equals(expected2) {
 		t.Errorf("Got %v, expected %v", result2, expected2)
 	}
 
@@ -138,7 +138,7 @@ func TestUnmarshalBinary(t *testing.T) {
 
 	if err3 != nil {
 		t.Error(err3)
-	} else if !result3.Equals(&expected3) {
+	} else if !result3.Equals(expected3) {
 		t.Errorf("Got %v, expected %v", result3, expected3)
 	}
 
@@ -150,7 +150,7 @@ func TestUnmarshalBinary(t *testing.T) {
 
 	if err4 != nil {
 		t.Error(err4)
-	} else if !result4.Equals(&expected4) {
+	} else if !result4.Equals(expected4) {
 		t.Errorf("Got %v, expected %v", result4, expected4)
 	}
 }

@@ -16,21 +16,30 @@ type Message struct {
 }
 
 // Compile-time check to ensure Message implements the Packet interface.
-var _ Packet = Message{}
+var _ Packet = &Message{}
 
 /*
 NewEmptyMessage returns an OSC message with default values.
 */
-func NewEmptyMessage() Message {
+func NewEmptyMessage() *Message {
 	return NewMessage("/")
 }
 
 /*
 NewMessage creates a new OSC message with an address pattern, and empty arguments.
 */
-func NewMessage(address string) Message {
-	msg := Message{Address: address}
-	return msg
+func NewMessage(address string) *Message {
+	return &Message{Address: address}
+}
+
+/*
+NewMessageFromData is a convenience function to unmarshal a message from a byte slice.
+*/
+func NewMessageFromData(data []byte) (*Message, error) {
+	var msg = &Message{}
+	err := msg.UnmarshalBinary(data)
+
+	return msg, err
 }
 
 /*
