@@ -5,37 +5,66 @@ import (
 	"strings"
 )
 
-type messageHandler struct {
-	addressPattern string
+/*
+MessageHandleFunc is a function type that accepts a pointer to a Message.
+*/
+type MessageHandleFunc func(*Message)
+
+/*
+Method represents an address pattern with associated invokable function.
+*/
+type Method struct {
+	AddressPattern string
+	Function       MessageHandleFunc
 	regexp         *regexp.Regexp
-	function       func(m *Message)
 }
 
-type messageDispatcher struct {
-	handlers []messageHandler
+/*
+AddressSpace holds a set of methods that an OSC server can respond to.
+*/
+type AddressSpace struct {
+	methods []Method
 }
 
-func (d *messageDispatcher) addHandler(addressPattern string, function func(*Message)) error {
+/*
+Handle adds an OSC method to the AddressSpace. If the AddressPattern is of invalid format, an error is returned.
+*/
+func (a *AddressSpace) Handle(addressPattern string, fn MessageHandleFunc) error {
 	// Compile a regexp to use when matching the address pattern
 	regexp, err := addressPatternToRegexp(addressPattern)
 	if err != nil {
 		return err
 	}
 
-	handler := messageHandler{addressPattern: addressPattern, regexp: regexp, function: function}
-	d.handlers = append(d.handlers, handler)
+	method := Method{
+		AddressPattern: addressPattern,
+		Function:       fn,
+		regexp:         regexp,
+	}
+
+	a.methods = append(a.methods, method)
 
 	return nil
 }
 
-func (d messageDispatcher) dispatch(m *Message) {
+/*
+Methods returns the OSC methods held in an AddressSpace.
+*/
+func (a AddressSpace) Methods() []Method {
+	return a.methods
+}
+
+/*
+Dispatch finds a matching OSC method for the Message m, and invokes it if found.
+*/
+func (a AddressSpace) Dispatch(m *Message) {
 	if m == nil {
 		return
 	}
 
-	for _, h := range d.handlers {
+	for _, h := range a.methods {
 		if h.regexp.MatchString(m.Address) {
-			h.function(m)
+			h.Function(m)
 		}
 	}
 }
@@ -64,11 +93,4 @@ func addressPatternToRegexp(addressPattern string) (*regexp.Regexp, error) {
 	}
 
 	return re, nil
-}
-
-/*
-match will return true if address is a valid match for addressPattern.
-*/
-func match(address string, addressPattern string) bool {
-	return false
 }
